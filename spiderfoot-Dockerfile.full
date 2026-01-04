@@ -1,0 +1,152 @@
+#
+# Spiderfoot Dockerfile (Full - includes all CLI tools, etc.)
+#
+# http://www.spiderfoot.net
+#
+# Written by: TheTechromancer
+# Fixed: Added build dependencies and old school download
+#
+
+FROM python:3.11
+
+# Install tools/dependencies from apt
+RUN apt-get -y update && apt-get -y install nbtscan onesixtyone nmap
+
+# Compile other tools from source
+RUN mkdir /tools || true
+WORKDIR /tools
+
+# Install Golang tools
+RUN apt-get -y update && apt-get -y install golang
+ENV GOPATH="/go" \
+    PATH="$GOPATH/bin:$PATH"
+RUN mkdir -p "$GOPATH/src" "$GOPATH/bin"
+
+# Install Ruby tools for WhatWeb
+RUN apt-get -y update && apt-get -y install ruby ruby-dev bundler
+# Install WhatWeb
+RUN git clone https://github.com/urbanadventurer/WhatWeb \
+    && gem install rchardet mongo json && cd /tools/WhatWeb \
+    && bundle install && cd /tools
+
+RUN groupadd spiderfoot \
+    && useradd -m -g spiderfoot -d /home/spiderfoot -s /sbin/nologin \
+    -c "SpiderFoot User" spiderfoot
+
+# Install RetireJS (modernized)
+RUN apt-get -y update && apt-get install -y curl gnupg lsb-release && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g retire \
+    && npm install -g yarn \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Google Chrome the New Way (Not via apt-key)
+RUN wget -qO - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google-chrome.list \
+    && apt -y update && apt install --allow-unauthenticated -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install WappalyzerGo (optional - skip if download fails)
+RUN wget -q https://github.com/projectdiscovery/wappalyzergo/releases/download/v0.0.119/wappalyzergo-linux-amd64.zip \
+    && unzip -q wappalyzergo-linux-amd64.zip \
+    && rm wappalyzergo-linux-amd64.zip \
+    && chmod +x wappalyzergo || echo "Wappalyzer installation skipped"
+
+# Install Nuclei
+RUN wget https://github.com/projectdiscovery/nuclei/releases/download/v2.6.5/nuclei_2.6.5_linux_amd64.zip \
+    && unzip nuclei_2.6.5_linux_amd64.zip \
+    && git clone https://github.com/projectdiscovery/nuclei-templates.git
+
+# Install testssl.sh
+RUN apt-get -y update && apt-get install -y bsdmainutils dnsutils coreutils && rm -rf /var/lib/apt/lists/*
+RUN git clone https://github.com/drwetter/testssl.sh.git
+
+# Install Snallygaster and TruffleHog
+RUN pip3 install snallygaster trufflehog
+
+# Place database and logs outside installation directory
+ENV SPIDERFOOT_DATA /var/lib/spiderfoot
+ENV SPIDERFOOT_LOGS /var/lib/spiderfoot/log
+ENV SPIDERFOOT_CACHE /var/lib/spiderfoot/cache
+
+RUN mkdir -p $SPIDERFOOT_DATA || true \
+    && mkdir -p $SPIDERFOOT_LOGS || true \
+    && mkdir -p $SPIDERFOOT_CACHE || true \
+    && chown spiderfoot:spiderfoot $SPIDERFOOT_DATA \
+    && chown spiderfoot:spiderfoot $SPIDERFOOT_LOGS \
+    && chown spiderfoot:spiderfoot $SPIDERFOOT_CACHE
+
+WORKDIR /home/spiderfoot
+COPY . .
+
+ENV VIRTUAL_ENV="/opt/venv" \
+    PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN python -m venv "$VIRTUAL_ENV"
+
+# Install build dependencies for lxml compilation
+RUN apt-get -y update && apt-get -y install \
+    build-essential \
+    libxml2-dev \
+    libxslt1-dev \
+    python3-dev \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# OLD SCHOOL: Download requirements.txt and install
+RUN $VIRTUAL_ENV/bin/pip install -U pip setuptools wheel
+RUN $VIRTUAL_ENV/bin/pip install "secure>=0.3.0,<0.4.0"
+RUN $VIRTUAL_ENV/bin/pip install "lxml>=4.9.2,<5"
+RUN $VIRTUAL_ENV/bin/pip install adblockparser
+RUN $VIRTUAL_ENV/bin/pip install dnspython
+RUN $VIRTUAL_ENV/bin/pip install ExifRead
+RUN $VIRTUAL_ENV/bin/pip install CherryPy
+RUN $VIRTUAL_ENV/bin/pip install cherrypy-cors
+RUN $VIRTUAL_ENV/bin/pip install Mako
+RUN $VIRTUAL_ENV/bin/pip install beautifulsoup4
+RUN $VIRTUAL_ENV/bin/pip install netaddr
+RUN $VIRTUAL_ENV/bin/pip install pysocks
+RUN $VIRTUAL_ENV/bin/pip install requests
+RUN $VIRTUAL_ENV/bin/pip install ipwhois
+RUN $VIRTUAL_ENV/bin/pip install ipaddr
+RUN $VIRTUAL_ENV/bin/pip install phonenumbers
+RUN $VIRTUAL_ENV/bin/pip install pygexf
+RUN $VIRTUAL_ENV/bin/pip install PyPDF2
+RUN $VIRTUAL_ENV/bin/pip install python-whois
+RUN $VIRTUAL_ENV/bin/pip install pyOpenSSL
+RUN $VIRTUAL_ENV/bin/pip install python-docx
+RUN $VIRTUAL_ENV/bin/pip install python-pptx
+RUN $VIRTUAL_ENV/bin/pip install networkx
+RUN $VIRTUAL_ENV/bin/pip install cryptography
+RUN $VIRTUAL_ENV/bin/pip install publicsuffixlist
+RUN $VIRTUAL_ENV/bin/pip install openpyxl
+RUN $VIRTUAL_ENV/bin/pip install pyyaml
+
+
+RUN chown -R spiderfoot:spiderfoot /tools
+RUN chown -R spiderfoot:spiderfoot "$VIRTUAL_ENV"
+RUN chown -R spiderfoot:spiderfoot "/home/spiderfoot"
+
+# Make all Python scripts executable
+RUN chmod +x /home/spiderfoot/*.py
+
+USER spiderfoot
+
+# Install Python tools
+RUN pip install dnstwist
+# CMSeeK
+WORKDIR /tools
+RUN git clone https://github.com/Tuhinshubhra/CMSeeK && cd CMSeeK \
+    && pip install colorama requests beautifulsoup4 lxml && mkdir Results
+
+# Install wafw00f
+RUN git clone https://github.com/EnableSecurity/wafw00f \
+    && cd wafw00f \
+    && pip install -e .
+
+WORKDIR /home/spiderfoot
+
+EXPOSE 5001
+
+# Run the application
+CMD ["python", "sf.py", "-l", "0.0.0.0:5001"]
