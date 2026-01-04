@@ -1,10 +1,25 @@
 #
-# Spiderfoot Dockerfile (Full - includes all CLI tools, etc.)
+# SpiderFoot Dockerfile (Full – includes all CLI tools and optional tooling)
 #
-# http://www.spiderfoot.net
+# Original project: https://www.spiderfoot.net
 #
-# Written by: TheTechromancer
-# Fixed: Added build dependencies and old school download
+# Based on the original Dockerfile.full from the official SpiderFoot repo:
+# https://raw.githubusercontent.com/smicallef/spiderfoot/refs/heads/master/Dockerfile.full
+# GitHub: https://github.com/smicallef/spiderfoot
+#
+# Modifications by Juniorpqp (from the version in this repo):
+# - Updated base image to python:3.11
+# - Added additional recon and security tooling (e.g., nbtscan, onesixtyone, nmap)
+# - Included build dependencies for compiling components and Python packages
+# - Replaced automated Yarn setup and legacy installs with updated Node setup
+# - Added support for RetireJS, Yarn, Chrome signing keys, WappalyzerGo fallback
+# - Included nuclei templates, testssl.sh, Snallygaster, TruffleHog, CMSeeK, wafw00f
+# - Explicit Python package installs instead of requirements file for finer control
+# - Rearranged permission setup and user ownership (spiderfoot)
+# - Environment variables for external data/log/cache paths
+#
+# This version aims to provide a more complete, reproducible build with extra tooling,
+# while preserving the spirit of the original SpiderFoot full Docker image.
 #
 
 FROM python:3.11
