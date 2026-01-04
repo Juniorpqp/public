@@ -1,0 +1,17 @@
+services:
+  spiderfoot:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile.full
+    volumes:
+      - spiderfoot-data:/var/lib/spiderfoot
+    image: spiderfoot
+    container_name: spiderfoot
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+    environment:
+      - PATH=/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    command: /opt/venv/bin/python sf.py -l 0.0.0.0:5001
+volumes:
+  spiderfoot-data
